@@ -201,8 +201,9 @@ export default function Home() {
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      <div className="w-64 bg-slate-900/50 backdrop-blur-xl border-r border-white/10 flex flex-col">
-        <div className="p-4 border-b border-white/10">
+      <div className="w-72 bg-slate-900/70 backdrop-blur-xl border-r border-white/10 flex flex-col">
+  <div className="p-4 border-b border-white/10">
+    <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Neuro-OS</h2>
           <button
             onClick={createNewChat}
             className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-2 rounded-lg transition-all duration-200"
@@ -249,11 +250,12 @@ export default function Home() {
       </div>
 
       <div className="flex-1 flex flex-col">
-        <div className="bg-slate-900/50 backdrop-blur-xl border-b border-white/10 p-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold gradient-text">NEURO-OS</h1>
-        </div>
+        <div className="bg-slate-900/50 backdrop-blur-xl border-b border-white/10 px-6 py-4 flex items-center justify-between shadow-lg">
+  <h1 className="text-xl font-bold gradient-text tracking-wide">NEURO-OS</h1>
+</div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex-1 overflow-y-auto px-4 py-6">
+          <div className="max-w-3xl mx-auto space-y-4">
           {currentChatId && getCurrentChat()?.messages.length === 0 && (
             <div className="h-full flex items-center justify-center text-center">
               <div>
@@ -320,9 +322,11 @@ export default function Home() {
           )}
 
           <div ref={messagesEndRef} />
+          </div>
         </div>
 
-        <div className="bg-slate-900/50 backdrop-blur-xl border-t border-white/10 p-4">
+        <div className="bg-slate-900/50 backdrop-blur-xl border-t border-white/10 px-4 py-4">
+          <div className="max-w-3xl mx-auto">
           <div className="flex gap-2 mb-2">
             <button
               onClick={toggleVoiceInput}
@@ -348,7 +352,8 @@ export default function Home() {
               className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold p-3 rounded-lg transition-all duration-200 disabled:opacity-50"
             >
               <Send size={20} />
-            </button>
+           </button>
+          </div>
           </div>
         </div>
       </div>
