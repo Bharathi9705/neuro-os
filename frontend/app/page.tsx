@@ -100,32 +100,50 @@ export default function Home() {
   };
 
   const handleSend = async () => {
-    if (!input.trim() || !currentChatId) return;
+    if (!input.trim()) return;
 
-    const currentChat = getCurrentChat();
-    if (!currentChat) return;
+    let activeChatId = currentChatId;
+
+    if (!activeChatId) {
+      const newChat: Chat = {
+        id: Date.now().toString(),
+        title: input.substring(0, 30),
+        messages: [],
+      };
+      setChats((prev) => [newChat, ...prev]);
+      activeChatId = newChat.id;
+      setCurrentChatId(activeChatId);
+    }
 
     const userMessage: Message = { role: 'user', content: input };
-    const updatedMessages = [...currentChat.messages, userMessage];
-
-    const updatedChats = chats.map((chat) =>
-      chat.id === currentChatId
-        ? {
-            ...chat,
-            title: chat.messages.length === 0 ? input.substring(0, 30) : chat.title,
-            messages: updatedMessages,
-          }
-        : chat
-    );
-    setChats(updatedChats);
+    const messageToSend = input;
     setInput('');
     setLoading(true);
+
+    setChats((prevChats) => {
+      const exists = prevChats.find((c) => c.id === activeChatId);
+      if (exists) {
+        return prevChats.map((chat) =>
+          chat.id === activeChatId
+            ? {
+                ...chat,
+                title: chat.messages.length === 0 ? messageToSend.substring(0, 30) : chat.title,
+                messages: [...chat.messages, userMessage],
+              }
+            : chat
+        );
+      }
+      return [
+        { id: activeChatId as string, title: messageToSend.substring(0, 30), messages: [userMessage] },
+        ...prevChats,
+      ];
+    });
 
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: input }),
+        body: JSON.stringify({ message: messageToSend }),
       });
 
       if (!response.ok) throw new Error('Failed to send message');
@@ -135,7 +153,7 @@ export default function Home() {
 
       setChats((prevChats) =>
         prevChats.map((chat) =>
-          chat.id === currentChatId
+          chat.id === activeChatId
             ? { ...chat, messages: [...chat.messages, assistantMessage] }
             : chat
         )
@@ -144,7 +162,7 @@ export default function Home() {
       console.error('Error:', error);
       setChats((prevChats) =>
         prevChats.map((chat) =>
-          chat.id === currentChatId
+          chat.id === activeChatId
             ? {
                 ...chat,
                 messages: [
@@ -199,40 +217,49 @@ export default function Home() {
     );
   }
 
+  const activeChat = getCurrentChat();
+
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       <div className="w-72 bg-slate-900/70 backdrop-blur-xl border-r border-white/10 flex flex-col">
-  <div className="p-4 border-b border-white/10">
-    <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Neuro-OS</h2>
+        <div className="p-4 border-b border-white/10 space-y-3">
+          <h2 className="text-lg font-bold gradient-text px-1">NEURO-OS</h2>
           <button
             onClick={createNewChat}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-2 rounded-lg transition-all duration-200"
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-2.5 rounded-lg transition-all duration-200 shadow-md"
           >
-            <Plus size={20} /> New Chat
+            <Plus size={18} /> New Chat
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+        <div className="flex-1 overflow-y-auto p-3 space-y-1">
+          {chats.length === 0 && (
+            <p className="text-xs text-slate-500 text-center mt-6 px-2">
+              No conversations yet. Start one above.
+            </p>
+          )}
           {chats.map((chat) => (
             <div
               key={chat.id}
-              className={`group p-3 rounded-lg cursor-pointer transition-all duration-200 ${
+              className={`group px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-200 ${
                 currentChatId === chat.id
                   ? 'bg-blue-600/30 border border-blue-500/50'
                   : 'hover:bg-white/5 border border-transparent'
               }`}
               onClick={() => setCurrentChatId(chat.id)}
             >
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-white truncate flex-1">{chat.title}</span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm text-slate-200 truncate flex-1">
+                  {chat.messages.length === 0 ? 'New conversation' : chat.title}
+                </span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     deleteChat(chat.id);
                   }}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                 >
-                  <Trash2 size={16} className="text-red-400 hover:text-red-300" />
+                  <Trash2 size={14} className="text-red-400 hover:text-red-300" />
                 </button>
               </div>
             </div>
@@ -242,118 +269,120 @@ export default function Home() {
         <div className="p-4 border-t border-white/10">
           <button
             onClick={handleLogout}
-            className="w-full text-sm text-slate-400 hover:text-white transition-colors py-2"
+            className="w-full text-xs text-slate-500 hover:text-slate-300 transition-colors py-2 truncate"
           >
             Logout ({user?.email})
           </button>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col">
-        <div className="bg-slate-900/50 backdrop-blur-xl border-b border-white/10 px-6 py-4 flex items-center justify-between shadow-lg">
-  <h1 className="text-xl font-bold gradient-text tracking-wide">NEURO-OS</h1>
-</div>
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="bg-slate-900/50 backdrop-blur-xl border-b border-white/10 px-6 py-4 flex items-center shadow-lg">
+          <h1 className="text-sm font-medium text-slate-300 truncate">
+            {activeChat?.messages.length ? activeChat.title : 'New Chat'}
+          </h1>
+        </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-6">
-          <div className="max-w-3xl mx-auto space-y-4">
-          {currentChatId && getCurrentChat()?.messages.length === 0 && (
-            <div className="h-full flex items-center justify-center text-center">
-              <div>
-                <h2 className="text-3xl font-bold gradient-text mb-2">Start a Conversation</h2>
-                <p className="text-slate-400">Ask me anything, or use voice input!</p>
+          <div className="max-w-3xl mx-auto space-y-4 h-full">
+            {(!activeChat || activeChat.messages.length === 0) && (
+              <div className="h-full flex items-center justify-center text-center">
+                <div>
+                  <h2 className="text-3xl font-bold gradient-text mb-2">Start a Conversation</h2>
+                  <p className="text-slate-400">Ask me anything, or use voice input!</p>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {getCurrentChat()?.messages.map((msg, idx) => (
-            <div
-              key={idx}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
-            >
+            {activeChat?.messages.map((msg, idx) => (
               <div
-                className={`max-w-2xl p-4 rounded-2xl ${
-                  msg.role === 'user'
-                    ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white'
-                    : 'bg-white/10 border border-white/20 text-slate-100'
-                }`}
+                key={idx}
+                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
               >
-                <div className="markdown prose prose-invert max-w-none">
-                  <ReactMarkdown
-                    components={{
-                      code({ className, children, ...props }: any) {
-                        const match = /language-(\w+)/.exec(className || '');
-                        return match ? (
-                          <div className="relative bg-slate-950 rounded-lg overflow-hidden my-4">
-                            <button
-                              onClick={() => copyToClipboard(String(children))}
-                              className="absolute top-2 right-2 bg-slate-700 hover:bg-slate-600 text-white p-2 rounded transition-colors"
-                            >
-                              {copied ? <Check size={16} /> : <Copy size={16} />}
-                            </button>
-                            <SyntaxHighlighter style={dracula} language={match[1]} PreTag="div" {...props}>
-                              {String(children).replace(/\n$/, '')}
-                            </SyntaxHighlighter>
-                          </div>
-                        ) : (
-                          <code className="bg-slate-950 px-2 py-1 rounded text-yellow-300" {...props}>
-                            {children}
-                          </code>
-                        );
-                      },
-                    }}
-                  >
-                    {msg.content}
-                  </ReactMarkdown>
+                <div
+                  className={`max-w-2xl p-4 rounded-2xl ${
+                    msg.role === 'user'
+                      ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white'
+                      : 'bg-white/10 border border-white/20 text-slate-100'
+                  }`}
+                >
+                  <div className="markdown prose prose-invert max-w-none">
+                    <ReactMarkdown
+                      components={{
+                        code({ className, children, ...props }: any) {
+                          const match = /language-(\w+)/.exec(className || '');
+                          return match ? (
+                            <div className="relative bg-slate-950 rounded-lg overflow-hidden my-4">
+                              <button
+                                onClick={() => copyToClipboard(String(children))}
+                                className="absolute top-2 right-2 bg-slate-700 hover:bg-slate-600 text-white p-2 rounded transition-colors"
+                              >
+                                {copied ? <Check size={16} /> : <Copy size={16} />}
+                              </button>
+                              <SyntaxHighlighter style={dracula} language={match[1]} PreTag="div" {...props}>
+                                {String(children).replace(/\n$/, '')}
+                              </SyntaxHighlighter>
+                            </div>
+                          ) : (
+                            <code className="bg-slate-950 px-2 py-1 rounded text-yellow-300" {...props}>
+                              {children}
+                            </code>
+                          );
+                        },
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
 
-          {loading && (
-            <div className="flex justify-start">
-              <div className="bg-white/10 border border-white/20 text-slate-100 p-4 rounded-2xl">
-                <div className="flex gap-2">
-                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+            {loading && (
+              <div className="flex justify-start">
+                <div className="bg-white/10 border border-white/20 text-slate-100 p-4 rounded-2xl">
+                  <div className="flex gap-2">
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <div ref={messagesEndRef} />
+            <div ref={messagesEndRef} />
           </div>
         </div>
 
         <div className="bg-slate-900/50 backdrop-blur-xl border-t border-white/10 px-4 py-4">
           <div className="max-w-3xl mx-auto">
-          <div className="flex gap-2 mb-2">
-            <button
-              onClick={toggleVoiceInput}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
-                isListening ? 'bg-red-600 text-white' : 'bg-white/10 hover:bg-white/20 text-slate-300'
-              }`}
-            >
-              <Mic size={20} /> {isListening ? 'Listening...' : 'Voice'}
-            </button>
-          </div>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="Type your message..."
-              className="flex-1 bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-all duration-200"
-            />
-            <button
-              onClick={handleSend}
-              disabled={loading || !input.trim()}
-              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold p-3 rounded-lg transition-all duration-200 disabled:opacity-50"
-            >
-              <Send size={20} />
-           </button>
-          </div>
+            <div className="flex gap-2 mb-2">
+              <button
+                onClick={toggleVoiceInput}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
+                  isListening ? 'bg-red-600 text-white' : 'bg-white/10 hover:bg-white/20 text-slate-300'
+                }`}
+              >
+                <Mic size={16} /> {isListening ? 'Listening...' : 'Voice'}
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                placeholder="Type your message..."
+                className="flex-1 bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-all duration-200"
+              />
+              <button
+                onClick={handleSend}
+                disabled={loading || !input.trim()}
+                className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold p-3 rounded-lg transition-all duration-200 disabled:opacity-50 shrink-0"
+              >
+                <Send size={20} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
