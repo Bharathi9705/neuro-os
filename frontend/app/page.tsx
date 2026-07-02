@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { dracula } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Send, Plus, Trash2, Mic, Copy, Check } from 'lucide-react';
+import { Send, Plus, Trash2, Mic, Copy, Check, Bot } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -27,7 +27,7 @@ export default function Home() {
   const [showAuth, setShowAuth] = useState(true);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
 
@@ -81,9 +81,10 @@ export default function Home() {
   };
 
   const deleteChat = (id: string) => {
-    setChats(chats.filter((chat) => chat.id !== id));
+    const remaining = chats.filter((chat) => chat.id !== id);
+    setChats(remaining);
     if (currentChatId === id) {
-      setCurrentChatId(chats.length > 1 ? chats[0].id : null);
+      setCurrentChatId(remaining.length > 0 ? remaining[0].id : null);
     }
   };
 
@@ -178,40 +179,46 @@ export default function Home() {
     }
   };
 
-  const copyToClipboard = (text: string) => {
+  const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopied(id);
+    setTimeout(() => setCopied(null), 2000);
   };
 
   if (showAuth) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
         <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl p-8 w-full max-w-md shadow-2xl">
-          <h1 className="text-4xl font-bold gradient-text mb-2 text-center">NEURO-OS</h1>
-          <p className="text-slate-300 text-center mb-8">Advanced AI Chatbot Platform</p>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <div className="flex items-center justify-center gap-3 mb-2">
+            <Bot size={32} className="text-blue-400" />
+            <h1 className="text-4xl font-bold text-white">NEURO-OS</h1>
+          </div>
+          <p className="text-slate-400 text-center mb-8 text-sm">Advanced AI Chatbot Platform</p>
+          <form onSubmit={handleLogin} className="space-y-3">
             <input
               type="email"
-              placeholder="Email"
+              placeholder="Email address"
               value={authEmail}
               onChange={(e) => setAuthEmail(e.target.value)}
-              className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+              className="w-full bg-white/5 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
             />
             <input
               type="password"
               placeholder="Password"
               value={authPassword}
               onChange={(e) => setAuthPassword(e.target.value)}
-              className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+              className="w-full bg-white/5 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:bg-white/10 transition-all"
             />
             <button
               type="submit"
-              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 rounded-lg transition-all duration-200 transform hover:scale-105"
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-3 rounded-xl transition-all duration-200 shadow-lg shadow-blue-500/20 mt-2"
             >
-              Login / Sign Up
+              Continue →
             </button>
           </form>
+          <p className="text-center text-xs text-slate-600 mt-6">
+            Any credentials work — local session only
+          </p>
         </div>
       </div>
     );
@@ -220,171 +227,228 @@ export default function Home() {
   const activeChat = getCurrentChat();
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      <div className="w-72 bg-slate-900/70 backdrop-blur-xl border-r border-white/10 flex flex-col">
-        <div className="p-4 border-b border-white/10 space-y-3">
-          <h2 className="text-lg font-bold gradient-text px-1">NEURO-OS</h2>
+    <div className="flex h-screen bg-slate-950 text-white overflow-hidden">
+
+      {/* Sidebar */}
+      <div className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0">
+
+        {/* Sidebar Header */}
+        <div className="px-4 pt-5 pb-4 border-b border-slate-800">
+          <div className="flex items-center gap-2 mb-4">
+            <Bot size={20} className="text-blue-400 shrink-0" />
+            <span className="text-base font-semibold text-white">NEURO-OS</span>
+          </div>
           <button
             onClick={createNewChat}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-2.5 rounded-lg transition-all duration-200 shadow-md"
+            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium py-2 px-3 rounded-lg transition-colors"
           >
-            <Plus size={18} /> New Chat
+            <Plus size={16} /> New Chat
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3 space-y-1">
-          {chats.length === 0 && (
-            <p className="text-xs text-slate-500 text-center mt-6 px-2">
-              No conversations yet. Start one above.
+        {/* Chat List */}
+        <div className="flex-1 overflow-y-auto py-2">
+          {chats.length === 0 ? (
+            <p className="text-xs text-slate-600 text-center mt-8 px-4">
+              No conversations yet
             </p>
-          )}
-          {chats.map((chat) => (
-            <div
-              key={chat.id}
-              className={`group px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-200 ${
-                currentChatId === chat.id
-                  ? 'bg-blue-600/30 border border-blue-500/50'
-                  : 'hover:bg-white/5 border border-transparent'
-              }`}
-              onClick={() => setCurrentChatId(chat.id)}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm text-slate-200 truncate flex-1">
-                  {chat.messages.length === 0 ? 'New conversation' : chat.title}
-                </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteChat(chat.id);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                >
-                  <Trash2 size={14} className="text-red-400 hover:text-red-300" />
-                </button>
+          ) : (
+            chats.map((chat) => (
+              <div
+                key={chat.id}
+                className={`group mx-2 px-3 py-2 rounded-lg cursor-pointer transition-colors mb-0.5 ${
+                  currentChatId === chat.id
+                    ? 'bg-slate-800 text-white'
+                    : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                }`}
+                onClick={() => setCurrentChatId(chat.id)}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm truncate flex-1">
+                    {chat.messages.length === 0 ? 'New conversation' : chat.title}
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteChat(chat.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 hover:text-red-400"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
-        <div className="p-4 border-t border-white/10">
+        {/* Sidebar Footer */}
+        <div className="px-4 py-3 border-t border-slate-800">
+          <div className="text-xs text-slate-600 truncate mb-1">{user?.email}</div>
           <button
             onClick={handleLogout}
-            className="w-full text-xs text-slate-500 hover:text-slate-300 transition-colors py-2 truncate"
+            className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
           >
-            Logout ({user?.email})
+            Sign out
           </button>
         </div>
       </div>
 
+      {/* Main Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        <div className="bg-slate-900/50 backdrop-blur-xl border-b border-white/10 px-6 py-4 flex items-center shadow-lg">
-          <h1 className="text-sm font-medium text-slate-300 truncate">
-            {activeChat?.messages.length ? activeChat.title : 'New Chat'}
-          </h1>
+
+        {/* Top Bar */}
+        <div className="h-14 border-b border-slate-800 px-6 flex items-center shrink-0">
+          <span className="text-sm font-medium text-slate-300 truncate">
+            {activeChat?.messages.length
+              ? activeChat.title
+              : activeChat
+              ? 'New conversation'
+              : 'NEURO-OS'}
+          </span>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-6">
-          <div className="max-w-3xl mx-auto space-y-4 h-full">
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-2xl mx-auto px-4 py-8">
+
             {(!activeChat || activeChat.messages.length === 0) && (
-              <div className="h-full flex items-center justify-center text-center">
-                <div>
-                  <h2 className="text-3xl font-bold gradient-text mb-2">Start a Conversation</h2>
-                  <p className="text-slate-400">Ask me anything, or use voice input!</p>
-                </div>
+              <div className="flex flex-col items-center justify-center h-96 text-center">
+                <Bot size={48} className="text-slate-700 mb-4" />
+                <h2 className="text-2xl font-semibold text-slate-300 mb-2">
+                  How can I help you today?
+                </h2>
+                <p className="text-slate-600 text-sm">
+                  Type a message below or use the Voice button
+                </p>
               </div>
             )}
 
-            {activeChat?.messages.map((msg, idx) => (
-              <div
-                key={idx}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
-              >
-                <div
-                  className={`max-w-2xl p-4 rounded-2xl ${
-                    msg.role === 'user'
-                      ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white'
-                      : 'bg-white/10 border border-white/20 text-slate-100'
-                  }`}
-                >
-                  <div className="markdown prose prose-invert max-w-none">
-                    <ReactMarkdown
-                      components={{
-                        code({ className, children, ...props }: any) {
-                          const match = /language-(\w+)/.exec(className || '');
-                          return match ? (
-                            <div className="relative bg-slate-950 rounded-lg overflow-hidden my-4">
-                              <button
-                                onClick={() => copyToClipboard(String(children))}
-                                className="absolute top-2 right-2 bg-slate-700 hover:bg-slate-600 text-white p-2 rounded transition-colors"
-                              >
-                                {copied ? <Check size={16} /> : <Copy size={16} />}
-                              </button>
-                              <SyntaxHighlighter style={dracula} language={match[1]} PreTag="div" {...props}>
-                                {String(children).replace(/\n$/, '')}
-                              </SyntaxHighlighter>
-                            </div>
-                          ) : (
-                            <code className="bg-slate-950 px-2 py-1 rounded text-yellow-300" {...props}>
-                              {children}
-                            </code>
-                          );
-                        },
-                      }}
-                    >
-                      {msg.content}
-                    </ReactMarkdown>
+            <div className="space-y-6">
+              {activeChat?.messages.map((msg, idx) => (
+                <div key={idx} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {msg.role === 'assistant' && (
+                    <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center shrink-0 mt-0.5">
+                      <Bot size={14} />
+                    </div>
+                  )}
+                  <div
+                    className={`max-w-xl rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                      msg.role === 'user'
+                        ? 'bg-blue-600 text-white rounded-br-sm'
+                        : 'bg-slate-800 text-slate-100 rounded-bl-sm'
+                    }`}
+                  >
+                    <div className="markdown prose prose-invert prose-sm max-w-none">
+                      <ReactMarkdown
+                        components={{
+                          code({ className, children, ...props }: any) {
+                            const match = /language-(\w+)/.exec(className || '');
+                            const codeId = `code-${idx}`;
+                            return match ? (
+                              <div className="relative rounded-lg overflow-hidden my-3 bg-slate-950 border border-slate-700">
+                                <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-700">
+                                  <span className="text-xs text-slate-500 font-mono">{match[1]}</span>
+                                  <button
+                                    onClick={() => copyToClipboard(String(children), codeId)}
+                                    className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors"
+                                  >
+                                    {copied === codeId ? (
+                                      <><Check size={12} /> Copied</>
+                                    ) : (
+                                      <><Copy size={12} /> Copy</>
+                                    )}
+                                  </button>
+                                </div>
+                                <SyntaxHighlighter
+                                  style={dracula}
+                                  language={match[1]}
+                                  PreTag="div"
+                                  customStyle={{ margin: 0, background: 'transparent', padding: '1rem' }}
+                                  {...props}
+                                >
+                                  {String(children).replace(/\n$/, '')}
+                                </SyntaxHighlighter>
+                              </div>
+                            ) : (
+                              <code className="bg-slate-900 px-1.5 py-0.5 rounded text-blue-300 font-mono text-xs" {...props}>
+                                {children}
+                              </code>
+                            );
+                          },
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                  {msg.role === 'user' && (
+                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold">
+                      {user?.email?.[0]?.toUpperCase() || 'U'}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {loading && (
+                <div className="flex gap-3 justify-start">
+                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
+                    <Bot size={14} />
+                  </div>
+                  <div className="bg-slate-800 rounded-2xl rounded-bl-sm px-4 py-3">
+                    <div className="flex gap-1.5 items-center h-4">
+                      <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></div>
+                      <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.15s' }}></div>
+                      <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }}></div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              )}
 
-            {loading && (
-              <div className="flex justify-start">
-                <div className="bg-white/10 border border-white/20 text-slate-100 p-4 rounded-2xl">
-                  <div className="flex gap-2">
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
+              <div ref={messagesEndRef} />
+            </div>
           </div>
         </div>
 
-        <div className="bg-slate-900/50 backdrop-blur-xl border-t border-white/10 px-4 py-4">
-          <div className="max-w-3xl mx-auto">
-            <div className="flex gap-2 mb-2">
-              <button
-                onClick={toggleVoiceInput}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
-                  isListening ? 'bg-red-600 text-white' : 'bg-white/10 hover:bg-white/20 text-slate-300'
-                }`}
-              >
-                <Mic size={16} /> {isListening ? 'Listening...' : 'Voice'}
-              </button>
-            </div>
-            <div className="flex gap-2">
+        {/* Input Area */}
+        <div className="border-t border-slate-800 px-4 py-4 shrink-0">
+          <div className="max-w-2xl mx-auto">
+            <div className="flex gap-2 items-end bg-slate-900 border border-slate-700 rounded-2xl px-4 py-3 focus-within:border-blue-500 transition-colors">
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                placeholder="Type your message..."
-                className="flex-1 bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-all duration-200"
+                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+                placeholder="Message NEURO-OS..."
+                className="flex-1 bg-transparent text-white placeholder-slate-500 text-sm focus:outline-none resize-none"
               />
-              <button
-                onClick={handleSend}
-                disabled={loading || !input.trim()}
-                className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold p-3 rounded-lg transition-all duration-200 disabled:opacity-50 shrink-0"
-              >
-                <Send size={20} />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={toggleVoiceInput}
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    isListening
+                      ? 'text-red-400 bg-red-400/10'
+                      : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                  title={isListening ? 'Stop listening' : 'Voice input'}
+                >
+                  <Mic size={18} />
+                </button>
+                <button
+                  onClick={handleSend}
+                  disabled={loading || !input.trim()}
+                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white p-1.5 rounded-lg transition-colors"
+                >
+                  <Send size={16} />
+                </button>
+              </div>
             </div>
+            <p className="text-center text-xs text-slate-700 mt-2">
+              NEURO-OS can make mistakes. Verify important information.
+            </p>
           </div>
         </div>
+
       </div>
     </div>
   );
