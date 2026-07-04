@@ -133,24 +133,38 @@ export default function Home() {
 
   // Send Message
   const handleSend = async () => {
-    if (!input.trim() || !currentChatId) return;
+    const messageContent = input.trim();
+    if (!messageContent) return;
 
-    const currentChat = getCurrentChat();
-    if (!currentChat) return;
+    let chatId = currentChatId;
+    let currentChats = [...chats];
+    
+    // Auto-create chat if none exists
+    if (!chatId) {
+      chatId = Date.now().toString();
+      const newChat: Chat = {
+        id: chatId,
+        title: messageContent.substring(0, 30),
+        messages: [],
+      };
+      currentChats = [newChat, ...chats];
+      setChats(currentChats);
+      setCurrentChatId(chatId);
+    }
 
-    const userMessage: Message = { role: 'user', content: input };
-    const updatedMessages = [...currentChat.messages, userMessage];
-
-    // Update chat title if it's the first message
-    const updatedChats = chats.map((chat) =>
-      chat.id === currentChatId
+    const userMessage: Message = { role: 'user', content: messageContent };
+    
+    // Update local state immediately
+    const updatedChats = currentChats.map((chat) =>
+      chat.id === chatId
         ? {
             ...chat,
-            title: chat.messages.length === 0 ? input.substring(0, 30) : chat.title,
-            messages: updatedMessages,
+            title: chat.messages.length === 0 ? messageContent.substring(0, 30) : chat.title,
+            messages: [...chat.messages, userMessage],
           }
         : chat
     );
+    
     setChats(updatedChats);
     setInput('');
     setLoading(true);
@@ -159,7 +173,7 @@ export default function Home() {
       const response = await fetch(`${apiUrl}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: input, agent }),
+        body: JSON.stringify({ message: messageContent, agent }),
       });
 
       if (!response.ok) throw new Error('Failed to send message');
@@ -169,7 +183,7 @@ export default function Home() {
 
       setChats((prevChats) =>
         prevChats.map((chat) =>
-          chat.id === currentChatId
+          chat.id === chatId
             ? { ...chat, messages: [...chat.messages, assistantMessage] }
             : chat
         )
@@ -290,7 +304,7 @@ export default function Home() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {currentChatId && getCurrentChat()?.messages.length === 0 && (
+          {!currentChatId && chats.length === 0 && (
             <div className="h-full flex items-center justify-center text-center">
               <div>
                 <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 mb-2">Start a Conversation</h2>
@@ -371,7 +385,7 @@ export default function Home() {
                 type="text"
                 placeholder="Describe the image you want to generate..."
                 value={imagePrompt}
-                onChange={(e) => setImagePrompt(e.target.value)}
+                onChange={(e) => imagePrompt(e.target.value)}
                 className="flex-1 bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
               />
               <button
@@ -415,7 +429,12 @@ export default function Home() {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
               placeholder="Type your message..."
               className="flex-1 bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-all duration-200"
             />
