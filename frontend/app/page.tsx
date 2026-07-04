@@ -439,11 +439,24 @@ export default function Home() {
               className="flex-1 bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-all duration-200"
             />
             <button
-              onClick={handleSend}
-              disabled={loading || !input.trim()}
-              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold p-3 rounded-lg transition-all duration-200 disabled:opacity-50 transform hover:scale-105"
+              onClick={() => {
+                if (!input.trim()) {
+                  // Add a small vibration/shake feedback if empty
+                  return;
+                }
+                handleSend();
+              }}
+              disabled={loading}
+              className={`bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold p-3 rounded-lg transition-all duration-200 transform active:scale-95 ${
+                loading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105 shadow-lg shadow-blue-500/20'
+              }`}
+              title="Send Message"
             >
-              <Send size={20} />
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Send size={20} className={input.trim() ? 'text-white' : 'text-white/40'} />
+              )}
             </button>
           </div>
         </div>
