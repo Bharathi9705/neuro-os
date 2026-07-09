@@ -4,11 +4,12 @@ import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { dracula } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Send, Plus, Trash2, Mic, Image as ImageIcon, Copy, Check } from 'lucide-react';
+import { Send, Plus, Trash2, Mic, Image as ImageIcon, Copy, Check, Settings, Sparkles, User, Bot, Loader2 } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  type?: 'text' | 'image';
 }
 
 interface Chat {
@@ -26,19 +27,43 @@ export default function Home() {
   const [isListening, setIsListening] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
   const [imagePrompt, setImagePrompt] = useState('');
-  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [user, setUser] = useState<{ id: string; email: string } | null>(null);
   const [showAuth, setShowAuth] = useState(true);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [copied, setCopied] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [customApiUrl, setCustomApiUrl] = useState('');
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
 
-  // Get API URL from environment
-  const apiUrl = typeof window !== 'undefined' 
-    ? process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8001'
-    : 'http://127.0.0.1:8001';
+  // Initialize from LocalStorage
+  useEffect(() => {
+    const savedChats = localStorage.getItem('neuro_chats');
+    const savedUrl = localStorage.getItem('neuro_api_url');
+    const savedUser = localStorage.getItem('neuro_user');
+    
+    if (savedChats) setChats(JSON.parse(savedChats));
+    if (savedUrl) setCustomApiUrl(savedUrl);
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+      setShowAuth(false);
+    }
+  }, []);
+
+  // Save to LocalStorage
+  useEffect(() => {
+    if (chats.length > 0) localStorage.setItem('neuro_chats', JSON.stringify(chats));
+    if (customApiUrl) localStorage.setItem('neuro_api_url', customApiUrl);
+    if (user) localStorage.setItem('neuro_user', JSON.stringify(user));
+  }, [chats, customApiUrl, user]);
+
+  // Determine API URL
+  const getApiUrl = () => {
+    if (customApiUrl) return customApiUrl;
+    return process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8001';
+  };
 
   // Initialize Web Speech API
   useEffect(() => {
@@ -58,19 +83,16 @@ export default function Home() {
     }
   }, []);
 
-  // Auto-scroll to latest message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chats, currentChatId]);
+  }, [chats, currentChatId, loading]);
 
-  // Authentication
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (authEmail && authPassword) {
-      setUser({ id: Date.now().toString(), email: authEmail });
+      const newUser = { id: Date.now().toString(), email: authEmail };
+      setUser(newUser);
       setShowAuth(false);
-      setAuthEmail('');
-      setAuthPassword('');
     }
   };
 
@@ -79,13 +101,14 @@ export default function Home() {
     setShowAuth(true);
     setChats([]);
     setCurrentChatId(null);
+    localStorage.removeItem('neuro_user');
+    localStorage.removeItem('neuro_chats');
   };
 
-  // Chat Management
   const createNewChat = () => {
     const newChat: Chat = {
       id: Date.now().toString(),
-      title: 'New Chat',
+      title: 'New Conversation',
       messages: [],
     };
     setChats([newChat, ...chats]);
@@ -93,110 +116,97 @@ export default function Home() {
   };
 
   const deleteChat = (id: string) => {
-    setChats(chats.filter((chat) => chat.id !== id));
+    const updated = chats.filter((chat) => chat.id !== id);
+    setChats(updated);
     if (currentChatId === id) {
-      setCurrentChatId(chats.length > 1 ? chats[0].id : null);
+      setCurrentChatId(updated.length > 0 ? updated[0].id : null);
     }
   };
 
   const getCurrentChat = () => chats.find((chat) => chat.id === currentChatId);
 
-  // Voice Input
   const toggleVoiceInput = () => {
     if (recognitionRef.current) {
-      if (isListening) {
-        recognitionRef.current.stop();
-      } else {
-        recognitionRef.current.start();
-      }
+      if (isListening) recognitionRef.current.stop();
+      else recognitionRef.current.start();
     }
   };
 
-  // Image Generation
   const generateImage = async () => {
     if (!imagePrompt.trim()) return;
     setLoading(true);
-    try {
-      const response = await fetch(`${apiUrl}/generate-image`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: imagePrompt }),
-      });
-      const data = await response.json();
-      setGeneratedImage(data.image_url);
-    } catch (error) {
-      console.error('Image generation failed:', error);
-      alert('Failed to generate image. Check backend connection.');
-    }
-    setLoading(false);
-  };
-
-  // Send Message
-  const handleSend = async () => {
-    const messageContent = input.trim();
-    if (!messageContent) return;
-
-    let chatId = currentChatId;
-    let currentChats = [...chats];
     
-    // Auto-create chat if none exists
+    let chatId = currentChatId;
     if (!chatId) {
       chatId = Date.now().toString();
-      const newChat: Chat = {
-        id: chatId,
-        title: messageContent.substring(0, 30),
-        messages: [],
-      };
-      currentChats = [newChat, ...chats];
-      setChats(currentChats);
+      const newChat: Chat = { id: chatId, title: `Image: ${imagePrompt.substring(0, 20)}`, messages: [] };
+      setChats([newChat, ...chats]);
       setCurrentChatId(chatId);
     }
 
-    const userMessage: Message = { role: 'user', content: messageContent };
-    
-    // Update local state immediately
-    const updatedChats = currentChats.map((chat) =>
-      chat.id === chatId
-        ? {
-            ...chat,
-            title: chat.messages.length === 0 ? messageContent.substring(0, 30) : chat.title,
-            messages: [...chat.messages, userMessage],
-          }
-        : chat
-    );
-    
-    setChats(updatedChats);
-    setInput('');
-    setLoading(true);
-
     try {
-      const response = await fetch(`${apiUrl}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: messageContent, agent }),
-      });
+      // Pro Image Generation using Pollinations (Real AI)
+      const encodedPrompt = encodeURIComponent(imagePrompt);
+      const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
+      
+      const assistantMessage: Message = { 
+        role: 'assistant', 
+        content: `![Generated Image](${imageUrl})\n\n**Prompt:** ${imagePrompt}`,
+        type: 'image'
+      };
 
-      if (!response.ok) throw new Error('Failed to send message');
-
-      const data = await response.json();
-      const assistantMessage: Message = { role: 'assistant', content: data.response };
-
-      setChats((prevChats) =>
-        prevChats.map((chat) =>
-          chat.id === chatId
-            ? { ...chat, messages: [...chat.messages, assistantMessage] }
-            : chat
-        )
-      );
+      setChats(prev => prev.map(chat => 
+        chat.id === chatId ? { ...chat, messages: [...chat.messages, { role: 'user', content: `Generate image: ${imagePrompt}` }, assistantMessage] } : chat
+      ));
+      
+      setImagePrompt('');
+      setShowImageGen(false);
     } catch (error) {
-      console.error('Error:', error);
-      alert('Failed to send message. Check backend connection.');
+      alert("Failed to generate image.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Copy to Clipboard
+  const handleSend = async () => {
+    const content = input.trim();
+    if (!content || loading) return;
+
+    let chatId = currentChatId;
+    let updatedChats = [...chats];
+
+    if (!chatId) {
+      chatId = Date.now().toString();
+      const newChat: Chat = { id: chatId, title: content.substring(0, 30), messages: [] };
+      updatedChats = [newChat, ...chats];
+      setChats(updatedChats);
+      setCurrentChatId(chatId);
+    }
+
+    const userMsg: Message = { role: 'user', content };
+    setChats(prev => prev.map(c => c.id === chatId ? { ...c, messages: [...c.messages, userMsg], title: c.messages.length === 0 ? content.substring(0, 30) : c.title } : c));
+    setInput('');
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${getApiUrl()}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: content, agent }),
+      });
+
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      
+      const assistantMsg: Message = { role: 'assistant', content: data.response };
+      setChats(prev => prev.map(c => c.id === chatId ? { ...c, messages: [...c.messages, assistantMsg] } : c));
+    } catch (error) {
+      alert("Connection Error: Make sure your backend is running at " + getApiUrl());
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -205,31 +215,25 @@ export default function Home() {
 
   if (showAuth) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-        <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl p-8 w-full max-w-md shadow-2xl">
-          <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 mb-2 text-center">NEURO-OS</h1>
-          <p className="text-slate-300 text-center mb-8">Advanced AI Chatbot Platform</p>
+      <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center p-4 font-sans">
+        <div className="w-full max-w-md space-y-8 bg-[#111] p-10 rounded-3xl border border-white/5 shadow-2xl">
+          <div className="text-center space-y-2">
+            <div className="inline-block p-4 bg-blue-600/10 rounded-2xl mb-4">
+              <Sparkles className="w-8 h-8 text-blue-500" />
+            </div>
+            <h1 className="text-4xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white to-white/50">NEURO-OS</h1>
+            <p className="text-white/40 font-medium">Next-Generation AI Interface</p>
+          </div>
           <form onSubmit={handleLogin} className="space-y-4">
-            <input
-              type="email"
-              placeholder="Email"
-              value={authEmail}
-              onChange={(e) => setAuthEmail(e.target.value)}
-              className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={authPassword}
-              onChange={(e) => setAuthPassword(e.target.value)}
-              className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
-            />
-            <button
-              type="submit"
-              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 rounded-lg transition-all duration-200 transform hover:scale-105"
-            >
-              Login / Sign Up
-            </button>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-white/30 uppercase tracking-widest ml-1">Access Email</label>
+              <input type="email" placeholder="name@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-white/20" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-white/30 uppercase tracking-widest ml-1">Security Key</label>
+              <input type="password" placeholder="••••••••" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-white/20" />
+            </div>
+            <button type="submit" className="w-full bg-white text-black font-bold py-4 rounded-2xl hover:bg-white/90 transition-all active:scale-[0.98] shadow-xl shadow-white/5">Initialize System</button>
           </form>
         </div>
       </div>
@@ -237,230 +241,177 @@ export default function Home() {
   }
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div className="flex h-screen bg-[#050505] text-white font-sans selection:bg-blue-500/30">
       {/* Sidebar */}
-      <div className="w-64 bg-slate-900/50 backdrop-blur-xl border-r border-white/10 flex flex-col">
-        <div className="p-4 border-b border-white/10">
-          <button
-            onClick={createNewChat}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-2 rounded-lg transition-all duration-200"
-          >
-            <Plus size={20} /> New Chat
+      <div className="w-72 bg-[#0A0A0A] border-r border-white/5 flex flex-col transition-all duration-300">
+        <div className="p-6">
+          <button onClick={createNewChat} className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-2xl border border-white/10 transition-all active:scale-95 group">
+            <Plus size={18} className="group-hover:rotate-90 transition-transform" /> New Conversation
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+        <div className="flex-1 overflow-y-auto px-4 space-y-2 custom-scrollbar">
+          <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em] mb-4 ml-2">Recent Logs</p>
           {chats.map((chat) => (
-            <div
-              key={chat.id}
-              className={`group p-3 rounded-lg cursor-pointer transition-all duration-200 ${
-                currentChatId === chat.id
-                  ? 'bg-blue-600/30 border border-blue-500/50'
-                  : 'hover:bg-white/5 border border-transparent'
-              }`}
-              onClick={() => setCurrentChatId(chat.id)}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-white truncate flex-1">{chat.title}</span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteChat(chat.id);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <Trash2 size={16} className="text-red-400 hover:text-red-300" />
-                </button>
+            <div key={chat.id} onClick={() => setCurrentChatId(chat.id)} className={`group relative p-4 rounded-2xl cursor-pointer transition-all ${currentChatId === chat.id ? 'bg-white/10 border border-white/10 shadow-lg' : 'hover:bg-white/5 border border-transparent'}`}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium truncate opacity-80 group-hover:opacity-100">{chat.title}</span>
+                <button onClick={(e) => { e.stopPropagation(); deleteChat(chat.id); }} className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 rounded-lg transition-all"><Trash2 size={14} className="text-white/40 hover:text-red-400" /></button>
               </div>
             </div>
           ))}
         </div>
 
-        <div className="p-4 border-t border-white/10">
-          <button
-            onClick={handleLogout}
-            className="w-full text-sm text-slate-400 hover:text-white transition-colors py-2"
-          >
-            Logout ({user?.email})
+        <div className="p-6 space-y-3 border-t border-white/5">
+          <button onClick={() => setShowSettings(true)} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/5 transition-all text-white/60 hover:text-white">
+            <Settings size={18} /> <span className="text-sm font-bold">System Config</span>
           </button>
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-white/5">
+            <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center"><User size={16} className="text-blue-400" /></div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold text-white/30 uppercase">Operator</p>
+              <p className="text-xs font-bold truncate">{user?.email}</p>
+            </div>
+            <button onClick={handleLogout} className="text-[10px] font-black text-red-500/50 hover:text-red-500 uppercase tracking-tighter">Exit</button>
+          </div>
         </div>
       </div>
 
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div className="bg-slate-900/50 backdrop-blur-xl border-b border-white/10 p-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">NEURO-OS</h1>
-          <select
-            value={agent}
-            onChange={(e) => setAgent(e.target.value)}
-            className="bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
-          >
-            <option value="general">General AI</option>
-            <option value="coding">Coding Agent</option>
-            <option value="research">Research Agent</option>
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col relative overflow-hidden">
+        {/* Top Header */}
+        <header className="h-20 flex items-center justify-between px-8 border-b border-white/5 bg-[#050505]/80 backdrop-blur-xl z-10">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-black tracking-tighter italic">NEURO<span className="text-blue-500">.</span>OS</h1>
+            <div className="px-2 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-[10px] font-black text-blue-400 tracking-widest uppercase">v2.0 PRO</div>
+          </div>
+          <select value={agent} onChange={(e) => setAgent(e.target.value)} className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all appearance-none cursor-pointer hover:bg-white/10">
+            <option value="general">CORE INTELLIGENCE</option>
+            <option value="coding">SYNTAX ENGINE</option>
+            <option value="research">KNOWLEDGE ARCHIVE</option>
           </select>
-        </div>
+        </header>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {!currentChatId && chats.length === 0 && (
-            <div className="h-full flex items-center justify-center text-center">
-              <div>
-                <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 mb-2">Start a Conversation</h2>
-                <p className="text-slate-400">Ask me anything, generate images, or use voice input!</p>
+        {/* Chat Space */}
+        <main className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
+          {!currentChatId && (
+            <div className="h-full flex flex-col items-center justify-center text-center space-y-6 max-w-2xl mx-auto">
+              <div className="w-20 h-20 rounded-3xl bg-blue-600/10 flex items-center justify-center border border-blue-500/20 animate-pulse">
+                <Sparkles size={40} className="text-blue-500" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-4xl font-black tracking-tighter">System Online.</h2>
+                <p className="text-white/40 font-medium text-lg leading-relaxed">Awaiting operator input. I can process complex logic, generate high-fidelity visual assets, and execute research protocols.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4 w-full">
+                {['Explain Quantum Computing', 'Generate a Cyberpunk City', 'Write a React Hook', 'Analyze Market Trends'].map(item => (
+                  <button key={item} onClick={() => { setInput(item); }} className="p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/20 transition-all text-sm font-bold text-white/60 hover:text-white text-left">{item}</button>
+                ))}
               </div>
             </div>
           )}
 
           {getCurrentChat()?.messages.map((msg, idx) => (
-            <div
-              key={idx}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-2xl p-4 rounded-2xl ${
-                  msg.role === 'user'
-                    ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white'
-                    : 'bg-white/10 border border-white/20 text-slate-100'
-                }`}
-              >
-                <div className="markdown prose prose-invert max-w-none">
-                  <ReactMarkdown
-                    components={{
+            <div key={idx} className={`flex gap-6 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+              <div className={`w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center border ${msg.role === 'user' ? 'bg-white text-black border-white' : 'bg-blue-600/10 border-blue-500/20 text-blue-500'}`}>
+                {msg.role === 'user' ? <User size={20} /> : <Bot size={20} />}
+              </div>
+              <div className={`flex-1 space-y-2 ${msg.role === 'user' ? 'text-right' : ''}`}>
+                <p className="text-[10px] font-black uppercase tracking-widest opacity-30">{msg.role === 'assistant' ? 'NEURO-OS' : 'OPERATOR'}</p>
+                <div className={`inline-block text-left p-6 rounded-3xl leading-relaxed ${msg.role === 'user' ? 'bg-[#111] border border-white/10 rounded-tr-none' : 'bg-white/5 border border-white/5 rounded-tl-none'}`}>
+                  <div className="markdown prose prose-invert max-w-none prose-p:leading-relaxed prose-pre:bg-[#050505] prose-pre:border prose-pre:border-white/10 prose-code:text-blue-400">
+                    <ReactMarkdown components={{
                       code({ node, inline, className, children, ...props }: any) {
                         const match = /language-(\w+)/.exec(className || '');
                         return !inline && match ? (
-                          <div className="relative bg-slate-950 rounded-lg overflow-hidden my-4">
-                            <button
-                              onClick={() => copyToClipboard(String(children))}
-                              className="absolute top-2 right-2 bg-slate-700 hover:bg-slate-600 text-white p-2 rounded transition-colors"
-                            >
-                              {copied ? <Check size={16} /> : <Copy size={16} />}
-                            </button>
-                            <SyntaxHighlighter
-                              style={dracula}
-                              language={match[1]}
-                              PreTag="div"
-                              {...props}
-                            >
-                              {String(children).replace(/\n$/, '')}
-                            </SyntaxHighlighter>
+                          <div className="relative group/code">
+                            <button onClick={() => copyToClipboard(String(children))} className="absolute top-4 right-4 p-2 bg-white/5 hover:bg-white/10 rounded-lg opacity-0 group-hover/code:opacity-100 transition-all border border-white/10">{copied ? <Check size={14} /> : <Copy size={14} />}</button>
+                            <SyntaxHighlighter style={dracula} language={match[1]} PreTag="div" className="!rounded-2xl !p-6 !my-4 !bg-[#050505] !border !border-white/10">{String(children).replace(/\n$/, '')}</SyntaxHighlighter>
                           </div>
-                        ) : (
-                          <code className="bg-slate-950 px-2 py-1 rounded text-yellow-300" {...props}>
-                            {children}
-                          </code>
-                        );
+                        ) : <code className="bg-white/10 px-2 py-0.5 rounded text-blue-300 font-bold" {...props}>{children}</code>;
                       },
-                    }}
-                  >
-                    {msg.content}
-                  </ReactMarkdown>
+                      img({ src, alt }) {
+                        return <div className="my-6 rounded-3xl overflow-hidden border border-white/10 shadow-2xl group/img relative">
+                          <img src={src} alt={alt} className="w-full h-auto" />
+                          <a href={src} target="_blank" rel="noreferrer" className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-all font-bold text-sm tracking-widest uppercase">View Original</a>
+                        </div>;
+                      }
+                    }}>{msg.content}</ReactMarkdown>
+                  </div>
                 </div>
               </div>
             </div>
           ))}
-
           {loading && (
-            <div className="flex justify-start">
-              <div className="bg-white/10 border border-white/20 text-slate-100 p-4 rounded-2xl">
-                <div className="flex gap-2">
-                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
-                </div>
+            <div className="flex gap-6 max-w-4xl mx-auto">
+              <div className="w-10 h-10 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center"><Loader2 size={20} className="text-blue-500 animate-spin" /></div>
+              <div className="space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-widest opacity-30">PROCESSING...</p>
+                <div className="w-12 h-6 bg-white/5 rounded-full flex items-center justify-center gap-1 animate-pulse"><div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce"></div><div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{animationDelay:'0.2s'}}></div><div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{animationDelay:'0.4s'}}></div></div>
               </div>
             </div>
           )}
+          <div ref={messagesEndRef} className="h-32" />
+        </main>
 
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Image Generation Panel */}
-        {showImageGen && (
-          <div className="bg-white/5 border-t border-white/10 p-4">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Describe the image you want to generate..."
-                value={imagePrompt}
-                onChange={(e) => imagePrompt(e.target.value)}
-                className="flex-1 bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
-              />
-              <button
-                onClick={generateImage}
-                disabled={loading}
-                className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-semibold px-4 py-2 rounded-lg transition-all duration-200 disabled:opacity-50"
-              >
-                Generate
-              </button>
-            </div>
-            {generatedImage && (
-              <div className="mt-4">
-                <img src={generatedImage} alt="Generated" className="max-w-full rounded-lg" />
+        {/* Input Dock */}
+        <div className="absolute bottom-0 inset-x-0 p-8 bg-gradient-to-t from-[#050505] via-[#050505] to-transparent">
+          <div className="max-w-4xl mx-auto relative group">
+            {showImageGen && (
+              <div className="absolute bottom-full left-0 right-0 mb-4 p-6 bg-[#111] border border-white/10 rounded-3xl shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2 text-blue-400 font-black text-xs uppercase tracking-widest"><ImageIcon size={14} /> Visual Synthesis</div>
+                  <button onClick={() => setShowImageGen(false)} className="text-white/20 hover:text-white transition-all text-xs font-bold uppercase">Cancel</button>
+                </div>
+                <div className="flex gap-3">
+                  <input type="text" placeholder="Describe the visual asset to generate..." value={imagePrompt} onChange={(e) => setImagePrompt(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && generateImage()} className="flex-1 bg-white/5 border border-white/10 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all" />
+                  <button onClick={generateImage} disabled={loading || !imagePrompt.trim()} className="bg-white text-black font-black px-8 rounded-2xl hover:bg-white/90 transition-all disabled:opacity-50">SYNTHESIZE</button>
+                </div>
               </div>
             )}
-          </div>
-        )}
-
-        {/* Input Area */}
-        <div className="bg-slate-900/50 backdrop-blur-xl border-t border-white/10 p-4">
-          <div className="flex gap-2 mb-2">
-            <button
-              onClick={toggleVoiceInput}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
-                isListening
-                  ? 'bg-red-600 text-white'
-                  : 'bg-white/10 hover:bg-white/20 text-slate-300'
-              }`}
-            >
-              <Mic size={20} /> {isListening ? 'Listening...' : 'Voice'}
-            </button>
-            <button
-              onClick={() => setShowImageGen(!showImageGen)}
-              className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-slate-300 rounded-lg transition-all duration-200"
-            >
-              <ImageIcon size={20} /> Image
-            </button>
-          </div>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder="Type your message..."
-              className="flex-1 bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-all duration-200"
-            />
-            <button
-              onClick={() => {
-                if (!input.trim()) {
-                  // Add a small vibration/shake feedback if empty
-                  return;
-                }
-                handleSend();
-              }}
-              disabled={loading}
-              className={`bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold p-3 rounded-lg transition-all duration-200 transform active:scale-95 ${
-                loading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105 shadow-lg shadow-blue-500/20'
-              }`}
-              title="Send Message"
-            >
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <Send size={20} className={input.trim() ? 'text-white' : 'text-white/40'} />
-              )}
-            </button>
+            
+            <div className="bg-[#111] border border-white/10 rounded-[2.5rem] p-3 flex items-center gap-3 shadow-2xl focus-within:border-white/20 transition-all">
+              <button onClick={toggleVoiceInput} className={`p-4 rounded-3xl transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-white/5 hover:bg-white/10 text-white/40 hover:text-white'}`}><Mic size={20} /></button>
+              <button onClick={() => setShowImageGen(!showImageGen)} className={`p-4 rounded-3xl transition-all ${showImageGen ? 'bg-blue-500 text-white' : 'bg-white/5 hover:bg-white/10 text-white/40 hover:text-white'}`}><ImageIcon size={20} /></button>
+              <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }} placeholder="Enter command or query..." className="flex-1 bg-transparent border-none focus:ring-0 text-white placeholder:text-white/20 font-medium px-4" />
+              <button onClick={handleSend} disabled={loading || !input.trim()} className={`p-4 rounded-[1.8rem] transition-all flex items-center justify-center ${input.trim() ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white/5 text-white/20'}`}><Send size={20} /></button>
+            </div>
+            <p className="text-center mt-4 text-[10px] font-black text-white/10 uppercase tracking-[0.3em]">Neural Link Status: <span className="text-green-500/50">Optimal</span></p>
           </div>
         </div>
+
+        {/* Settings Modal */}
+        {showSettings && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
+            <div className="w-full max-w-lg bg-[#111] border border-white/10 rounded-[2.5rem] p-10 shadow-2xl space-y-8">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3"><Settings className="text-blue-500" /> <h3 className="text-2xl font-black tracking-tighter">System Configuration</h3></div>
+                <button onClick={() => setShowSettings(false)} className="text-white/20 hover:text-white transition-all font-bold uppercase text-xs">Close</button>
+              </div>
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-1">Backend Uplink URL</label>
+                  <input type="text" placeholder="https://your-backend.onrender.com" value={customApiUrl} onChange={(e) => setCustomApiUrl(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-white/10" />
+                  <p className="text-[10px] text-white/20 ml-1">Current: {getApiUrl()}</p>
+                </div>
+                <div className="p-6 bg-blue-500/5 border border-blue-500/10 rounded-2xl space-y-2">
+                  <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest">Network Protocol</h4>
+                  <p className="text-xs text-white/40 leading-relaxed font-medium">By default, the system attempts to connect to your local environment. Enter your Render URL above to enable remote operations.</p>
+                </div>
+              </div>
+              <button onClick={() => { setShowSettings(false); window.location.reload(); }} className="w-full bg-white text-black font-black py-4 rounded-2xl hover:bg-white/90 transition-all shadow-xl shadow-white/5">Update Link & Restart</button>
+            </div>
+          </div>
+        )}
       </div>
+
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.05); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.1); }
+        .gradient-text { background: linear-gradient(to right, #fff, rgba(255,255,255,0.5)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+      `}</style>
     </div>
   );
 }
