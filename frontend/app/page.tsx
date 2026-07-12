@@ -383,7 +383,7 @@ export default function Home() {
   }
 
   return (
-    <div className="flex h-screen w-screen bg-[#050505] text-white font-sans selection:bg-blue-500/30 overflow-hidden">
+    <div className="flex h-[100dvh] md:h-screen w-screen bg-[#050505] text-white font-sans selection:bg-blue-500/30 overflow-hidden">
 
       {/* Backdrop — mobile only, click to close sidebar */}
       <div

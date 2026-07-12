@@ -17,3 +17,11 @@ body {
     )
     rgb(var(--background-start-rgb));
 }
+
+@media (max-width: 767px) {
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+}
