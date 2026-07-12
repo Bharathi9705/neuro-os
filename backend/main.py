@@ -124,7 +124,7 @@ async def chat(request: ChatRequest):
                 {"role": "system", "content": system_prompt.get(request.agent, system_prompt["general"])},
                 {"role": "user", "content": request.message}
             ],
-            model="llama-3.1-8b-instant",
+            model="llama-3.3-70b-versatile",
         )
 
         return {"response": chat_completion.choices[0].message.content, "agent": request.agent}
