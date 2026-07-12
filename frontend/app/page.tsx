@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { signIn, useSession, signOut } from 'next-auth/react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { dracula } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -19,6 +20,8 @@ interface Chat {
 }
 
 export default function Home() {
+  const { data: session } = useSession();
+
   const [chats, setChats] = useState<Chat[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [input, setInput] = useState('');
@@ -31,8 +34,11 @@ export default function Home() {
   const [showAuth, setShowAuth] = useState(true);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false); // NEW: password visibility toggle
-  const [rememberMe, setRememberMe] = useState(true); // NEW: remember me checkbox
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+  const [isSignupMode, setIsSignupMode] = useState(false); // NEW: toggle login/signup
+  const [authError, setAuthError] = useState(''); // NEW: shows backend errors
+  const [authLoading, setAuthLoading] = useState(false); // NEW: disables button while checking
   const [copied, setCopied] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [customApiUrl, setCustomApiUrl] = useState('');
@@ -54,6 +60,14 @@ export default function Home() {
       setShowAuth(false);
     }
   }, []);
+
+  // Sync Google OAuth session into app state
+  useEffect(() => {
+    if (session?.user) {
+      setUser({ id: session.user.email || 'google-user', email: session.user.email || '' });
+      setShowAuth(false);
+    }
+  }, [session]);
 
   // Lock body scroll when sidebar is open on mobile
   useEffect(() => {
@@ -100,22 +114,48 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chats, currentChatId, loading]);
 
-  const handleLogin = (e: React.FormEvent) => {
+  // Real login/signup — calls backend, validates password properly
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (authEmail && authPassword) {
-      const newUser = { id: Date.now().toString(), email: authEmail };
+    setAuthError('');
+
+    if (!authEmail || !authPassword) {
+      setAuthError('Email and password are required');
+      return;
+    }
+
+    setAuthLoading(true);
+    try {
+      const endpoint = isSignupMode ? '/auth/signup' : '/auth/login';
+      const response = await fetch(`${getApiUrl()}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail, password: authPassword }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setAuthError(data.detail || 'Something went wrong. Please try again.');
+        setAuthLoading(false);
+        return;
+      }
+
+      const newUser = { id: data.email, email: data.email };
       setUser(newUser);
       setShowAuth(false);
       if (rememberMe) {
         localStorage.setItem('neuro_user', JSON.stringify(newUser));
       }
+    } catch (error) {
+      setAuthError('Could not reach the backend. Make sure it is running at ' + getApiUrl());
+    } finally {
+      setAuthLoading(false);
     }
   };
 
   const handleGoogleLogin = () => {
-    // Placeholder — wire this up to a real OAuth flow (e.g. NextAuth + Google provider)
-    // once you have a Google Cloud OAuth client ID configured.
-    alert('Google sign-in needs OAuth setup (Google Cloud Console + NextAuth). This button is a placeholder for now.');
+    signIn('google');
   };
 
   const handleLogout = () => {
@@ -123,8 +163,12 @@ export default function Home() {
     setShowAuth(true);
     setChats([]);
     setCurrentChatId(null);
+    setAuthEmail('');
+    setAuthPassword('');
+    setAuthError('');
     localStorage.removeItem('neuro_user');
     localStorage.removeItem('neuro_chats');
+    signOut();
   };
 
   const createNewChat = () => {
@@ -268,6 +312,24 @@ export default function Home() {
             <div className="flex-1 h-px bg-white/10" />
           </div>
 
+          {/* Login / Signup toggle */}
+          <div className="flex bg-white/5 rounded-2xl p-1 border border-white/10">
+            <button
+              type="button"
+              onClick={() => { setIsSignupMode(false); setAuthError(''); }}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${!isSignupMode ? 'bg-white text-black' : 'text-white/40 hover:text-white'}`}
+            >
+              Log In
+            </button>
+            <button
+              type="button"
+              onClick={() => { setIsSignupMode(true); setAuthError(''); }}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${isSignupMode ? 'bg-white text-black' : 'text-white/40 hover:text-white'}`}
+            >
+              Sign Up
+            </button>
+          </div>
+
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <label className="text-xs font-bold text-white/30 uppercase tracking-widest ml-1">Access Email</label>
@@ -278,7 +340,7 @@ export default function Home() {
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
+                  placeholder={isSignupMode ? 'At least 6 characters' : '••••••••'}
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
                   className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-white/20"
@@ -294,7 +356,12 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Remember me */}
+            {authError && (
+              <div className="px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
+                {authError}
+              </div>
+            )}
+
             <label className="flex items-center gap-2 cursor-pointer select-none ml-1">
               <input
                 type="checkbox"
@@ -305,7 +372,10 @@ export default function Home() {
               <span className="text-xs font-medium text-white/40">Remember me</span>
             </label>
 
-            <button type="submit" className="w-full bg-white text-black font-bold py-4 rounded-2xl hover:bg-white/90 transition-all active:scale-[0.98] shadow-xl shadow-white/5">Initialize System</button>
+            <button type="submit" disabled={authLoading} className="w-full bg-white text-black font-bold py-4 rounded-2xl hover:bg-white/90 transition-all active:scale-[0.98] shadow-xl shadow-white/5 disabled:opacity-50 flex items-center justify-center gap-2">
+              {authLoading ? <Loader2 size={18} className="animate-spin" /> : null}
+              {isSignupMode ? 'Create Account' : 'Initialize System'}
+            </button>
           </form>
         </div>
       </div>
@@ -397,7 +467,7 @@ export default function Home() {
           </select>
         </header>
 
-        {/* Chat Space — widened: max-w increased and side padding reduced so content isn't narrow */}
+        {/* Chat Space */}
         <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 md:px-6 md:py-8 space-y-8 custom-scrollbar">
           {!currentChatId && (
             <div className="h-full flex flex-col items-center justify-center text-center space-y-6 max-w-3xl mx-auto">
@@ -459,7 +529,7 @@ export default function Home() {
           <div ref={messagesEndRef} className="h-32" />
         </main>
 
-        {/* Input Dock — widened to match wider chat area */}
+        {/* Input Dock */}
         <div className="absolute bottom-0 inset-x-0 p-3 sm:p-4 md:p-8 bg-gradient-to-t from-[#050505] via-[#050505] to-transparent">
           <div className="max-w-7xl mx-auto relative group">
             {showImageGen && (
