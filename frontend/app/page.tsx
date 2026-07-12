@@ -398,7 +398,7 @@ export default function Home() {
         </header>
 
         {/* Chat Space — widened: max-w increased and side padding reduced so content isn't narrow */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 md:p-8 space-y-8 custom-scrollbar">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 md:px-6 md:py-8 space-y-8 custom-scrollbar">
           {!currentChatId && (
             <div className="h-full flex flex-col items-center justify-center text-center space-y-6 max-w-3xl mx-auto">
               <div className="w-16 h-16 md:w-20 md:h-20 rounded-3xl bg-blue-600/10 flex items-center justify-center border border-blue-500/20 animate-pulse">
@@ -417,7 +417,7 @@ export default function Home() {
           )}
 
           {getCurrentChat()?.messages.map((msg, idx) => (
-            <div key={idx} className={`flex gap-3 md:gap-6 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+            <div key={idx} className={`flex gap-3 md:gap-6 max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
               <div className={`w-8 h-8 md:w-10 md:h-10 rounded-xl flex-shrink-0 flex items-center justify-center border ${msg.role === 'user' ? 'bg-white text-black border-white' : 'bg-blue-600/10 border-blue-500/20 text-blue-500'}`}>
                 {msg.role === 'user' ? <User size={18} /> : <Bot size={18} />}
               </div>
@@ -448,7 +448,7 @@ export default function Home() {
             </div>
           ))}
           {loading && (
-            <div className="flex gap-3 md:gap-6 max-w-5xl mx-auto">
+            <div className="flex gap-3 md:gap-6 max-w-7xl mx-auto">
               <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center"><Loader2 size={18} className="text-blue-500 animate-spin" /></div>
               <div className="space-y-2">
                 <p className="text-[10px] font-black uppercase tracking-widest opacity-30">PROCESSING...</p>
@@ -461,7 +461,7 @@ export default function Home() {
 
         {/* Input Dock — widened to match wider chat area */}
         <div className="absolute bottom-0 inset-x-0 p-3 sm:p-4 md:p-8 bg-gradient-to-t from-[#050505] via-[#050505] to-transparent">
-          <div className="max-w-5xl mx-auto relative group">
+          <div className="max-w-7xl mx-auto relative group">
             {showImageGen && (
               <div className="absolute bottom-full left-0 right-0 mb-4 p-4 md:p-6 bg-[#111] border border-white/10 rounded-3xl shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
                 <div className="flex items-center justify-between mb-4">
