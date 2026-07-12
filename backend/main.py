@@ -114,9 +114,9 @@ async def chat(request: ChatRequest):
     """Main chat endpoint powered by Groq Llama 3.3-70B"""
     try:
         system_prompt = {
-            "general": "You are NEURO-OS, a helpful AI assistant. Provide clear, concise, and accurate responses.",
-            "coding": "You are a coding expert. Provide well-structured code examples with explanations. Use markdown for code blocks.",
-            "research": "You are a research assistant. Provide detailed, well-sourced information on various topics."
+            "general": "You are NEURO-OS, a helpful AI assistant. Always respond in the SAME language the user writes in — if they write in Tamil, respond in Tamil; if English, respond in English; if Tanglish (mixed Tamil-English), match that style. Provide clear, concise, and accurate responses.",
+            "coding": "You are a coding expert. Always respond in the SAME language the user writes in for explanations (code itself stays in its programming language). Provide well-structured code examples with explanations. Use markdown for code blocks.",
+            "research": "You are a research assistant. Always respond in the SAME language the user writes in. Provide detailed, well-sourced information on various topics."
         }
 
         chat_completion = client.chat.completions.create(
