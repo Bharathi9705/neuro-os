@@ -5,7 +5,7 @@ import { signIn, useSession, signOut } from 'next-auth/react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { dracula } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Send, Plus, Trash2, Mic, Image as ImageIcon, Copy, Check, Settings, Sparkles, User, Bot, Loader2, Menu, X, Eye, EyeOff } from 'lucide-react';
+import { Send, Plus, Trash2, Mic, Image as ImageIcon, Copy, Check, Settings, Sparkles, User, Bot, Loader2, Menu, X, Eye, EyeOff, Paperclip } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -290,61 +290,61 @@ export default function Home() {
   };
 
   const exportChat = () => {
-  const chat = getCurrentChat();
-  if (!chat) return;
+    const chat = getCurrentChat();
+    if (!chat) return;
 
-  let content = `NEURO-OS Chat Export\n${chat.title}\n${new Date().toLocaleString()}\n${'='.repeat(40)}\n\n`;
-  chat.messages.forEach((msg) => {
-    const speaker = msg.role === 'user' ? 'OPERATOR' : 'NEURO-OS';
-    content += `${speaker}:\n${msg.content}\n\n`;
-  });
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-
-  let chatId = currentChatId;
-  if (!chatId) {
-    chatId = Date.now().toString();
-    const newChat: Chat = { id: chatId, title: `File: ${file.name.substring(0, 20)}`, messages: [] };
-    setChats(prev => [newChat, ...prev]);
-    setCurrentChatId(chatId);
-  }
-
-  const userMsg: Message = { role: 'user', content: `📎 Uploaded: ${file.name}` };
-  setChats(prev => prev.map(c => c.id === chatId ? { ...c, messages: [...c.messages, userMsg] } : c));
-  setLoading(true);
-
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await fetch(`${getApiUrl()}/analyze-file`, {
-      method: 'POST',
-      body: formData,
+    let content = `NEURO-OS Chat Export\n${chat.title}\n${new Date().toLocaleString()}\n${'='.repeat(40)}\n\n`;
+    chat.messages.forEach((msg) => {
+      const speaker = msg.role === 'user' ? 'OPERATOR' : 'NEURO-OS';
+      content += `${speaker}:\n${msg.content}\n\n`;
     });
 
-    if (!response.ok) throw new Error();
-    const data = await response.json();
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${chat.title.replace(/[^a-z0-9]/gi, '_')}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
-    const assistantMsg: Message = { role: 'assistant', content: data.response };
-    setChats(prev => prev.map(c => c.id === chatId ? { ...c, messages: [...c.messages, assistantMsg] } : c));
-  } catch (error) {
-    alert("Failed to analyze file. Make sure your backend is running at " + getApiUrl());
-  } finally {
-    setLoading(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  }
-};
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  const blob = new Blob([content], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${chat.title.replace(/[^a-z0-9]/gi, '_')}.txt`;
-  link.click();
-  URL.revokeObjectURL(url);
-};
+    let chatId = currentChatId;
+    if (!chatId) {
+      chatId = Date.now().toString();
+      const newChat: Chat = { id: chatId, title: `File: ${file.name.substring(0, 20)}`, messages: [] };
+      setChats(prev => [newChat, ...prev]);
+      setCurrentChatId(chatId);
+    }
+
+    const userMsg: Message = { role: 'user', content: `📎 Uploaded: ${file.name}` };
+    setChats(prev => prev.map(c => c.id === chatId ? { ...c, messages: [...c.messages, userMsg] } : c));
+    setLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(`${getApiUrl()}/analyze-file`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+
+      const assistantMsg: Message = { role: 'assistant', content: data.response };
+      setChats(prev => prev.map(c => c.id === chatId ? { ...c, messages: [...c.messages, assistantMsg] } : c));
+    } catch (error) {
+      alert("Failed to analyze file. Make sure your backend is running at " + getApiUrl());
+    } finally {
+      setLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   if (showAuth) {
     return (
