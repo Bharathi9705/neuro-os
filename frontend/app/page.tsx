@@ -268,7 +268,11 @@ export default function Home() {
       const response = await fetch(`${getApiUrl()}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: content, agent }),
+        body: JSON.stringify({
+        message: content,
+        agent,
+        history: getCurrentChat()?.messages.map(m => ({ role: m.role, content: m.content })) || []
+      }),
       });
 
       if (!response.ok) throw new Error();
