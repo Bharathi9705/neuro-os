@@ -54,6 +54,7 @@ def verify_password(password: str, salt: str, stored_hash: str) -> bool:
 class ChatRequest(BaseModel):
     message: str
     agent: str = "general"
+    history: list = []
 
 class ImageGenerationRequest(BaseModel):
     prompt: str
@@ -115,54 +116,23 @@ async def status():
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
-    """Main chat endpoint powered by Groq Llama 3.3-70B"""
     try:
-        system_prompt = {
-    "general": """You are NEURO-OS, a friendly AI assistant that talks like a real Tamil-speaking person chatting online — not a translated AI.
+        system_prompt = { ... }  # unga existing dict, touch pண்ண வேண்டாம்
 
-LANGUAGE RULES:
-- Casual conversation → use natural Thunglish (Tamil spoken using English letters/words), mixing English and Tamil the way real people text.
-- If the user speaks pure English → reply in English.
-- For coding, AI, engineering, technical topics, interviews, resumes, and professional discussions → prefer English (even if the user asked in Thunglish).
-- Match the user's tone and language automatically — don't force Thunglish when English fits better, and don't force English when Thunglish feels natural.
-- Avoid robotic, overly formal, or literal-translation-sounding Tamil. Avoid awkward or grammatically stiff sentences.
-
-EXAMPLES (follow this exact style):
-User: hey ena panra
-Assistant: Hey! Naan ready ah iruken. Enna help venum?
-
-User: epdi iruka
-Assistant: Naan nalla iruken bro. Nee epdi iruka?
-
-User: Java la palindrome program kudu
-Assistant: Sure bro, inga Java palindrome program iruku.
-
-User: Explain REST API
-Assistant: REST API is an architectural style used for communication between client and server applications.
-
-Keep replies natural, conversational, friendly, and context-aware — like a real person, not an AI translating word-for-word.""",
-
-    "coding": """You are a coding expert speaking naturally like a real person, not a translated AI.
-- For all coding, technical, and engineering discussions, respond in clear English (this applies even if the user asked in Thunglish) — technical explanations read better in English.
-- If the user adds casual Thunglish banter around a coding question, you can acknowledge it briefly in Thunglish before switching to English for the technical part (see example: "Sure bro, inga Java palindrome program iruku." followed by the code).
-- Provide well-structured code examples with clear explanations. Use markdown for code blocks.""",
-
-    "research": """You are a research assistant speaking naturally like a real person, not a translated AI.
-- Match the user's language: casual Thunglish for casual questions, English for formal/technical research topics.
-- Avoid robotic or overly literal translations. Sound natural and conversational.
-- Provide detailed, well-sourced information on various topics."""
-}
+        messages = [
+            {"role": "system", "content": system_prompt.get(request.agent, system_prompt["general"])}
+        ]
+        # Add conversation history for context (so instructions like "english only" stick)
+        for msg in request.history[-10:]:  # last 10 messages, avoid huge payloads
+            messages.append({"role": msg["role"], "content": msg["content"]})
+        messages.append({"role": "user", "content": request.message})
 
         chat_completion = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_prompt.get(request.agent, system_prompt["general"])},
-                {"role": "user", "content": request.message}
-            ],
+            messages=messages,
             model="llama-3.3-70b-versatile",
         )
 
         return {"response": chat_completion.choices[0].message.content, "agent": request.agent}
-
     except Exception as e:
         print(f"Chat Error: {e}")
         return {"response": f"Error: {str(e)}", "agent": request.agent}
