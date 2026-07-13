@@ -45,6 +45,7 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
 
   // Initialize from LocalStorage
@@ -198,6 +199,15 @@ export default function Home() {
       else recognitionRef.current.start();
     }
   };
+   
+  const speakText = (text: string) => {
+  if (typeof window === 'undefined') return;
+  window.speechSynthesis.cancel(); // stop any ongoing speech first
+  const utterance = new SpeechSynthesisUtterance(text.replace(/[*#`]/g, '')); // strip markdown symbols
+  utterance.rate = 1;
+  utterance.pitch = 1;
+  window.speechSynthesis.speak(utterance);
+};
 
   const generateImage = async () => {
     if (!imagePrompt.trim()) return;
@@ -278,6 +288,63 @@ export default function Home() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const exportChat = () => {
+  const chat = getCurrentChat();
+  if (!chat) return;
+
+  let content = `NEURO-OS Chat Export\n${chat.title}\n${new Date().toLocaleString()}\n${'='.repeat(40)}\n\n`;
+  chat.messages.forEach((msg) => {
+    const speaker = msg.role === 'user' ? 'OPERATOR' : 'NEURO-OS';
+    content += `${speaker}:\n${msg.content}\n\n`;
+  });
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  let chatId = currentChatId;
+  if (!chatId) {
+    chatId = Date.now().toString();
+    const newChat: Chat = { id: chatId, title: `File: ${file.name.substring(0, 20)}`, messages: [] };
+    setChats(prev => [newChat, ...prev]);
+    setCurrentChatId(chatId);
+  }
+
+  const userMsg: Message = { role: 'user', content: `📎 Uploaded: ${file.name}` };
+  setChats(prev => prev.map(c => c.id === chatId ? { ...c, messages: [...c.messages, userMsg] } : c));
+  setLoading(true);
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${getApiUrl()}/analyze-file`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) throw new Error();
+    const data = await response.json();
+
+    const assistantMsg: Message = { role: 'assistant', content: data.response };
+    setChats(prev => prev.map(c => c.id === chatId ? { ...c, messages: [...c.messages, assistantMsg] } : c));
+  } catch (error) {
+    alert("Failed to analyze file. Make sure your backend is running at " + getApiUrl());
+  } finally {
+    setLoading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+};
+
+  const blob = new Blob([content], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${chat.title.replace(/[^a-z0-9]/gi, '_')}.txt`;
+  link.click();
+  URL.revokeObjectURL(url);
+};
 
   if (showAuth) {
     return (
@@ -460,11 +527,18 @@ export default function Home() {
             <h1 className="text-lg md:text-xl font-black tracking-tighter italic truncate">NEURO<span className="text-blue-500">.</span>OS</h1>
             <div className="hidden sm:block flex-shrink-0 px-2 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-[10px] font-black text-blue-400 tracking-widest uppercase">v2.0 PRO</div>
           </div>
-          <select value={agent} onChange={(e) => setAgent(e.target.value)} className="flex-shrink-0 bg-white/5 border border-white/10 rounded-xl px-2 md:px-4 py-2 text-[10px] md:text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all appearance-none cursor-pointer hover:bg-white/10 max-w-[42%] md:max-w-none truncate">
-            <option value="general">CORE INTELLIGENCE</option>
-            <option value="coding">SYNTAX ENGINE</option>
-            <option value="research">KNOWLEDGE ARCHIVE</option>
-          </select>
+          <div className="flex items-center gap-2 flex-shrink-0">
+  {currentChatId && (
+    <button onClick={exportChat} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-all" aria-label="Export chat">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </button>
+  )}
+  <select value={agent} onChange={(e) => setAgent(e.target.value)} className="flex-shrink-0 bg-white/5 border border-white/10 rounded-xl px-2 md:px-4 py-2 text-[10px] md:text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all appearance-none cursor-pointer hover:bg-white/10 max-w-[42%] md:max-w-none truncate">
+    <option value="general">CORE INTELLIGENCE</option>
+    <option value="coding">SYNTAX ENGINE</option>
+    <option value="research">KNOWLEDGE ARCHIVE</option>
+  </select>
+</div>
         </header>
 
         {/* Chat Space */}
@@ -492,7 +566,14 @@ export default function Home() {
                 {msg.role === 'user' ? <User size={18} /> : <Bot size={18} />}
               </div>
               <div className={`flex-1 min-w-0 space-y-2 ${msg.role === 'user' ? 'text-right' : ''}`}>
-                <p className="text-[10px] font-black uppercase tracking-widest opacity-30">{msg.role === 'assistant' ? 'NEURO-OS' : 'OPERATOR'}</p>
+                <div className="flex items-center gap-2">
+  <p className="text-[10px] font-black uppercase tracking-widest opacity-30">{msg.role === 'assistant' ? 'NEURO-OS' : 'OPERATOR'}</p>
+  {msg.role === 'assistant' && (
+    <button onClick={() => speakText(msg.content)} className="text-white/20 hover:text-blue-400 transition-all" aria-label="Read aloud">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+    </button>
+  )}
+</div>
                 <div className={`inline-block text-left p-4 md:p-6 rounded-3xl leading-relaxed max-w-full ${msg.role === 'user' ? 'bg-[#111] border border-white/10 rounded-tr-none' : 'bg-white/5 border border-white/5 rounded-tl-none'}`}>
                   <div className="markdown prose prose-invert prose-sm md:prose-base max-w-none prose-p:leading-relaxed prose-pre:bg-[#050505] prose-pre:border prose-pre:border-white/10 prose-code:text-blue-400">
                     <ReactMarkdown components={{
@@ -548,6 +629,8 @@ export default function Home() {
             <div className="bg-[#111] border border-white/10 rounded-[2rem] md:rounded-[2.5rem] p-2 md:p-3 flex items-center gap-1 md:gap-3 shadow-2xl focus-within:border-white/20 transition-all">
               <button onClick={toggleVoiceInput} className={`p-3 md:p-4 rounded-2xl md:rounded-3xl transition-all flex-shrink-0 ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-white/5 hover:bg-white/10 text-white/40 hover:text-white'}`}><Mic size={18} /></button>
               <button onClick={() => setShowImageGen(!showImageGen)} className={`p-3 md:p-4 rounded-2xl md:rounded-3xl transition-all flex-shrink-0 ${showImageGen ? 'bg-blue-500 text-white' : 'bg-white/5 hover:bg-white/10 text-white/40 hover:text-white'}`}><ImageIcon size={18} /></button>
+              <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".pdf,image/*" className="hidden" />
+              <button onClick={() => fileInputRef.current?.click()} className="p-3 md:p-4 rounded-2xl md:rounded-3xl transition-all flex-shrink-0 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white" aria-label="Upload file"><Paperclip size={18} /></button>
               <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }} placeholder="Enter command..." className="flex-1 min-w-0 bg-transparent border-none focus:ring-0 text-white placeholder:text-white/20 font-medium px-2 md:px-4 text-sm md:text-base" />
               <button onClick={handleSend} disabled={loading || !input.trim()} className={`p-3 md:p-4 rounded-xl md:rounded-[1.8rem] transition-all flex items-center justify-center flex-shrink-0 ${input.trim() ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-white/5 text-white/20'}`}><Send size={18} /></button>
             </div>
