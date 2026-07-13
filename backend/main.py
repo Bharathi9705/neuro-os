@@ -2,6 +2,10 @@ import os
 import json
 import hashlib
 import hmac
+import base64
+from fastapi import UploadFile, File
+from pypdf import PdfReader
+import io
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -174,6 +178,56 @@ async def generate_image(request: ImageGenerationRequest):
     except Exception as e:
         print(f"Image Generation Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+# ============ File Upload & Analysis ============
+@app.post("/analyze-file")
+async def analyze_file(file: UploadFile = File(...)):
+    """Analyze uploaded PDF or image files"""
+    try:
+        content_type = file.content_type or ""
+        file_bytes = await file.read()
+
+        if "pdf" in content_type:
+            reader = PdfReader(io.BytesIO(file_bytes))
+            text = ""
+            for page in reader.pages[:10]:  # limit to first 10 pages
+                text += page.extract_text() or ""
+            text = text[:8000]  # limit length sent to model
+
+            if not text.strip():
+                return {"response": "Couldn't extract any readable text from this PDF. It might be a scanned image-only PDF."}
+
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": "You are NEURO-OS. Summarize and analyze the following document content clearly and concisely."},
+                    {"role": "user", "content": f"Analyze this document:\n\n{text}"}
+                ],
+                model="llama-3.3-70b-versatile",
+            )
+            return {"response": chat_completion.choices[0].message.content, "type": "pdf"}
+
+        elif "image" in content_type:
+            base64_image = base64.b64encode(file_bytes).decode("utf-8")
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "Describe and analyze this image in detail."},
+                            {"type": "image_url", "image_url": {"url": f"data:{content_type};base64,{base64_image}"}}
+                        ]
+                    }
+                ],
+                model="llama-3.2-90b-vision-preview",
+            )
+            return {"response": chat_completion.choices[0].message.content, "type": "image"}
+
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file type. Please upload a PDF or image.")
+
+    except Exception as e:
+        print(f"File Analysis Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))    
 
 # ============ Chat History ============
 chat_history = {}
